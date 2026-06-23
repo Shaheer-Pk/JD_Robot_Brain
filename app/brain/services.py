@@ -37,7 +37,7 @@ async def get_llm_response(text: str, custom_personality: str | None = None) -> 
     system_prompt = IDENTITY_AND_CAPABILITIES + "\n\n" + persona        # Evaluated at runtime (based on face recognition future work)
 
     response = await client.aio.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.1-flash-lite",
         contents=text,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt
