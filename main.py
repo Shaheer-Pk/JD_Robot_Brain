@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
+from app.vision.routers import router as vision_router
+from app.vision import stream_routes
 
 load_dotenv()       # Load env first because router tries to access api key on start-up
 
@@ -10,4 +12,6 @@ app = FastAPI(
     version = "0.1.0"
 )
 
+app.include_router(vision_router)
 app.include_router(brain_router, prefix = "/brain", tags = ["Brain"])
+app.include_router(stream_routes.router)
