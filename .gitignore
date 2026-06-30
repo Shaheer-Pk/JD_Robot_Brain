@@ -9,6 +9,7 @@ arc_project/*cache*/
 .env
 
 # The context file to keep me updated on the path i am working on
+context
 jd-context.md
 project_scope.txt
 
