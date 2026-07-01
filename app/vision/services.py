@@ -24,6 +24,7 @@ def extract_embedding(image_bytes: bytes):
         result = DeepFace.represent(
             img_path=image_np,            # DeepFace accepts a numpy array directly here
             model_name=EMBEDDING_MODEL,
+            detector_backend="retinaface",
             enforce_detection=True,       # makes it throw an error if no face is found
         )
     except ValueError:
@@ -80,8 +81,7 @@ def identify_face(db, image_bytes: bytes):
     return {
         "user_id": profile["id"],
         "name": profile["name"],
-        "persona": profile["persona"],
-        "preferences": profile.get("preferences"),
+        "persona": profile["persona"],          # Add memory context from table if needed here
         "confidence": round(1 - distance, 2),
     }
 

@@ -11,5 +11,5 @@ class FaceEmbedding(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, index=True)   # links back to users.id as foreign key
-    embedding = Column(JSON)                # the 128 numbers, stored as a list (embedding)
+    embedding = Column(JSON)                # the 512 numbers, stored as a list (embedding)
     created_at = Column(DateTime, server_default=func.now())
