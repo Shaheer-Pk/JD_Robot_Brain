@@ -1,5 +1,6 @@
 # Ignoring my virtual env (redundant safety check)
 my_venv
+.myvenv
 
 # Ignore any cache files or folders generated inside arc_project
 arc_project/*cache*/
