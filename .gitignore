@@ -6,6 +6,9 @@ my_venv
 arc_project/*cache*/
 *.cache
 
+# Ignoring sqlite3 local generate database
+database.db
+
 #Ignoring env
 .env
 
