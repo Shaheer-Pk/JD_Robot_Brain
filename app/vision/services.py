@@ -4,37 +4,13 @@ from PIL import Image
 from deepface import DeepFace
 
 from .models import FaceEmbedding
+from app.shared.extract_embedding import extract_embedding
 
 # defines get_user_profile(db, user_id)
 from app.users import services as user_services
 EMBEDDING_MODEL = "Facenet512"
 
 THRESHOLD = 1.4  # starting point, tune after testing with real enrolled users
-
- 
-def extract_embedding(image_bytes: bytes):
-    
-    # Turns a photo (raw bytes) into a 512-number fingerprint.
-    # Returns None if no face was found in the photo.
-    
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    image_np = np.array(image)  # store image as number array in variable, same as before
- 
-    try:
-        result = DeepFace.represent(
-            img_path=image_np,            # DeepFace accepts a numpy array directly here
-            model_name=EMBEDDING_MODEL,
-            detector_backend="retinaface",
-            enforce_detection=True,       # makes it throw an error if no face is found
-        )
-    except ValueError:
-        # This is DeepFace's way of saying "no face found in this photo"
-        return None
- 
-    raw_embedding = np.array(result[0]["embedding"])
-    normalized = raw_embedding / np.linalg.norm(raw_embedding)
- 
-    return normalized.tolist()
 
 
 def find_best_match(db, new_embedding):
