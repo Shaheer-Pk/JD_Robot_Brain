@@ -1,13 +1,18 @@
 # Ignoring my virtual env (redundant safety check)
 my_venv
 .myvenv
+venv_bridge
 
 # Ignore any cache files or folders generated inside arc_project
 arc_project/*cache*/
 *.cache
 
 # Ignoring sqlite3 local generate database
-database.db
+*.db
+
+# Ignoring the files created by sqlite3 WAL mode
+*.db-wal
+*.db-shm
 
 #Ignoring env
 .env

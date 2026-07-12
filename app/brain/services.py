@@ -42,9 +42,15 @@ SESSION_MAX_TURNS = _profile["memory_config"]["session_max_turns"]
 # reset on face-change and seeded from the DB once that work lands.
 conversation_memory = ConversationMemory(max_turns=SESSION_MAX_TURNS)
 
-
-async def get_llm_response(text: str, custom_personality: str | None = None) -> str:
-    persona = custom_personality if custom_personality else DEFAULT_GUEST_PERSONA
+async def get_llm_response(text: str, custom_personality: dict | None = None) -> str:
+    # In case vision was able to recognize and 
+    # send custom_personality over to brain/routers.py
+    # Otherwise router keeps this as none, which means load
+    # default guest persona from robot_profile.json
+    if custom_personality:
+        persona = f"You are talking with {custom_personality['name']}. Behave towards them as follows: {custom_personality['persona']}"
+    else:
+        persona = DEFAULT_GUEST_PERSONA
     system_prompt = IDENTITY_AND_CAPABILITIES + "\n\n" + persona        # Evaluated at runtime (based on face recognition future work)
 
     # Transform our internal {"user": ..., "jd": ...} turn dicts into the

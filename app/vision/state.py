@@ -1,16 +1,70 @@
+"""
+app/vision/state.py — Single shared in-memory session state answering
+"who does JD currently see and recognize." One instance (`session`),
+process-lifetime, imported by both vision/routers.py (frame ingestion)
+and vision/services/recognition_services.py (background identification).
+
+Every field is read/written through a threading.Lock (self._lock) because
+two different threads touch this object concurrently: the request thread
+handling each POST /vision/stream call, and the background-task thread(s)
+Starlette spins up for attempt_identification(). All external reads MUST
+go through the locked getters (get_status(), get_is_listening(),
+get_profile()) — never read self.recognition_status / self.is_listening /
+self.user_profile directly from outside this file. Not defensive
+paranoia: a single attribute read is atomic under CPython's GIL, but a
+caller reading two related fields in two separate statements can still
+observe a torn, contradictory snapshot if a writer thread runs in
+between — the getters make each external read one atomic operation.
+
+State machine — recognition_status:
+  "idle"       -> no face currently in frame, nothing in progress
+  "pending"    -> a face is present, identification attempt(s) in flight
+  "identified" -> matched to a known user_id, active_user_id/user_profile set
+  "guest"      -> MAX_RECOGNITION_ATTEMPTS failed attempts, gave up
+   NOTE:
+        'idle' is a guard-rail which runs only once, at the very beginning,
+        later on nothing triggers it back and states cycle between
+        'pending', 'identified', 'guest'
+Flicker tolerance (FLICKER_TOLERANCE = 2s): mediapipe can lose a face for
+a frame or two on ordinary head movement, not because the person actually
+left. _should_preserve_session_locked() checks whether the face was lost
+under FLICKER_TOLERANCE seconds ago AND we haven't already dropped to
+"idle" — if so, on_face_detected() treats it as the SAME ongoing session
+(recognition_attempts, active identity, etc. untouched) instead of
+starting a fresh pending cycle. This covers an already-identified person
+flickering (don't re-run recognition) AND a still-pending/guest person
+flickering (don't reset their attempt count and get stuck in "pending"
+indefinitely on repeated flicker — this was a confirmed bug in the
+original design; see vision-handoff.md).
+
+first_detected_at is set ONLY when a genuinely new face starts a session
+(never touched during a preserved/flickered one) — kept for future
+logging/debugging even though the recognition-timeout guard no longer
+reads it (that logic is count-based now, below).
+
+MAX_RECOGNITION_ATTEMPTS (=3), not time-based: recognition_services.py
+gives up and calls mark_guest() once recognition_attempts >= 3 failed
+tries. Chosen over wall-clock time because thread-scheduling delay under
+load makes elapsed real time a poor proxy for "how many attempts actually
+ran" — count is what "max 3 attempts" is actually supposed to mean.
+
+RETRY_INTERVAL_SECONDS (=1.5): throttles how often attempt_identification
+does real work, via start_recognition_attempt()/finish_recognition_attempt()
+— an in-progress + min-interval gate preventing overlapping attempts and
+preventing a new attempt firing on every single incoming frame.
+"""
+
 from time import time
 import threading
 
+from app.vision.schemas import VisionProfile
+
 FLICKER_TOLERANCE = 2          # seconds — brief disappearance still counts as the same person
 RETRY_INTERVAL_SECONDS = 1.5   # only re-attempt recognition after this much time
+MAX_RECOGNITION_ATTEMPTS = 3   # give up and default to guest after this many failed attempts
 
 
 class FaceSessionState:
-    """
-    Tracks who the robot currently sees, recognition progress, mouth state,
-    and listening status. Single shared instance, all in memory.
-    """
-
     def __init__(self):
         self._lock = threading.Lock()
         self.active_user_id = None
@@ -29,24 +83,23 @@ class FaceSessionState:
         self.mouth_closed_since = None
         self.is_listening = False
 
-    # ---- face presence (called every frame from the stream) ----
-
     def on_face_detected(self):
         with self._lock:
             if self.face_present:
-                return  # still the same ongoing detection, nothing to do
+                return
 
             self.face_present = True
-            self.first_detected_at = time()
 
-            if self._should_reuse_cache_locked():
-                # Same person as a moment ago (brief flicker, e.g. they
-                # turned their head) — keep their identity, skip recognition.
-                self.recognition_status = "identified"
+            if self._should_preserve_session_locked():
+                # Same ongoing recognition (or already-identified person),
+                # brief flicker — do not reset anything, do not touch
+                # first_detected_at (it reflects when THIS session actually
+                # started, not when it happened to flicker back).
                 self.lost_at = None
                 return
 
             # Genuinely new face — start a fresh identification cycle.
+            self.first_detected_at = time()
             self.recognition_status = "pending"
             self.recognition_attempts = 0
             self.active_user_id = None
@@ -56,23 +109,20 @@ class FaceSessionState:
             self.stall_phrase_queued = False
 
     def on_face_lost(self):
-        # Called automatically now from the live stream (no face found
-        # in the latest frame) — replaces ARC's old "on tracking end" call.
         with self._lock:
             self.face_present = False
-            self.first_detected_at = None
             self.lost_at = time()
-            # active_user_id / user_profile are deliberately kept — flicker
-            # tolerance needs them in case this same person reappears soon.
+            # active_user_id / user_profile / first_detected_at deliberately
+            # kept — flicker tolerance needs them if this person reappears soon.
 
-    def _should_reuse_cache_locked(self) -> bool:
-        if self.active_user_id is None or self.lost_at is None:
+    def _should_preserve_session_locked(self) -> bool:
+        if self.lost_at is None:
+            return False
+        if self.recognition_status == "idle":
             return False
         return (time() - self.lost_at) < FLICKER_TOLERANCE
 
-    # ---- recognition outcome ----
-
-    def mark_identified(self, user_id, profile):
+    def mark_identified(self, user_id: int, profile: VisionProfile):
         with self._lock:
             self.active_user_id = user_id
             self.user_profile = profile
@@ -91,12 +141,13 @@ class FaceSessionState:
             return self.recognition_attempts
 
     def seconds_since_detected(self):
+        # Unused in current guard logic — kept for future logging/debugging.
+        # first_detected_at is preserved across flicker, so this reflects
+        # true session age, not time-since-last-flicker.
         with self._lock:
             if self.first_detected_at is None:
                 return None
             return time() - self.first_detected_at
-
-    # ---- recognition attempt locking (prevents overlapping attempts) ----
 
     def start_recognition_attempt(self, min_interval=RETRY_INTERVAL_SECONDS):
         with self._lock:
@@ -112,21 +163,16 @@ class FaceSessionState:
         with self._lock:
             self.recognition_in_progress = False
 
-    # ---- stall phrase ("user unidentified, one sec") ----
-
     def queue_stall_phrase(self):
         with self._lock:
             self.stall_phrase_queued = True
 
     def pop_stall_phrase(self):
-        """Returns True once, then clears the flag, so it only fires once."""
         with self._lock:
             if self.stall_phrase_queued:
                 self.stall_phrase_queued = False
                 return True
             return False
-
-    # ---- mouth tracking ----
 
     def update_mouth_state(self, is_open: bool):
         with self._lock:
@@ -141,8 +187,6 @@ class FaceSessionState:
                 return 0
             return time() - self.mouth_closed_since
 
-    # ---- listening flag ----
-
     def start_listening(self):
         with self._lock:
             self.is_listening = True
@@ -152,6 +196,20 @@ class FaceSessionState:
         with self._lock:
             self.is_listening = False
 
+    # ---- locked getters — all reads from outside this class go through
+    #      these, never raw attribute access ----
 
-# Single shared instance — there's only one camera, one robot, one "current person"
+    def get_status(self):
+        with self._lock:
+            return self.recognition_status
+
+    def get_is_listening(self):
+        with self._lock:
+            return self.is_listening
+
+    def get_profile(self) -> VisionProfile | None:
+        with self._lock:
+            return self.user_profile
+
+
 session = FaceSessionState()
