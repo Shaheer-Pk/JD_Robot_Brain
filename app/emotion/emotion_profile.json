@@ -1,0 +1,23 @@
+{
+  "repeat_penalty": -0.3,
+  "rude_penalty": -0.3,
+  "nice_bonus": 0.3,
+  "decay_per_minute": 0.2,
+  "hysteresis_buffer": 0.05,
+  "sleepy_idle_minutes": 5,
+  "bands": {
+    "angry":   [-1.0, -0.6],
+    "annoyed": [-0.6, -0.2],
+    "neutral": [-0.2,  0.2],
+    "happy":   [ 0.2,  0.6],
+    "excited": [ 0.6,  1.0]
+  },
+  "eye_presets": {
+    "angry":   {"color": "red",          "action_name": "angry"},
+    "annoyed": {"color": "orange",       "action_name": "annoyed"},
+    "neutral": {"color": "blue",         "action_name": "neutral"},
+    "happy":   {"color": "green",        "action_name": "happy"},
+    "excited": {"color": "yellow-green", "action_name": "excited"},
+    "sleepy":  {"color": "purple",       "action_name": "sleepy"}
+  }
+}
