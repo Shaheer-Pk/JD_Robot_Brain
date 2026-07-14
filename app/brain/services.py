@@ -9,6 +9,7 @@ from google import genai
 from google.genai import types
 
 from app.shared.memory import ConversationMemory
+from app.brain.schemas import LLMTurnResult
 
 # Importing from our env file (hidden)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -32,6 +33,7 @@ with open(os.path.join(os.path.dirname(__file__), "robot_profile.json"), "r") as
 # Key:Value pairs from \brain\robot_profile.json
 IDENTITY_AND_CAPABILITIES = _profile["identity_and_capabilities"]
 DEFAULT_GUEST_PERSONA = _profile["default_guest_persona"]
+TONE_CLASSIFICATION_GUIDANCE = _profile["tone_classification_guidance"]
 SESSION_MAX_TURNS = _profile["memory_config"]["session_max_turns"]
 
 # In-session conversation memory, instantiated once at module load time,
@@ -43,9 +45,10 @@ SESSION_MAX_TURNS = _profile["memory_config"]["session_max_turns"]
 conversation_memory = ConversationMemory(max_turns=SESSION_MAX_TURNS)
 
 
-async def get_llm_response(text: str, custom_personality: str | None = None) -> str:
+async def get_llm_response(text: str, custom_personality: str | None = None) -> tuple[str, bool, str]:
     persona = custom_personality if custom_personality else DEFAULT_GUEST_PERSONA
-    system_prompt = IDENTITY_AND_CAPABILITIES + "\n\n" + persona        # Evaluated at runtime (based on face recognition future work)
+    system_prompt = IDENTITY_AND_CAPABILITIES + "\n\n" + persona + "\n\n" + TONE_CLASSIFICATION_GUIDANCE
+    # Evaluated at runtime (based on face recognition future work)       
 
     # Transform our internal {"user": ..., "jd": ...} turn dicts into the
     # role-tagged types.Content objects Gemini's contents parameter expects.
@@ -71,17 +74,22 @@ async def get_llm_response(text: str, custom_personality: str | None = None) -> 
         model="gemini-3.1-flash-lite",
         contents=contents,
         config=types.GenerateContentConfig(
-            system_instruction=system_prompt
-        )
+            system_instruction=system_prompt,
+            response_mime_type="application/json",
+            response_schema=LLMTurnResult
+)
     )
+
+    result: LLMTurnResult = response.parsed     # parse once, store in a variable
 
     # Store this exchange AFTER a successful response, so a failed/errored
     # call never gets recorded as if JD actually said something.
-    conversation_memory.add_turn(text, response.text)
+    conversation_memory.add_turn(text, result.response)
 
-    # response.text is a Gemini SDK property, not a Python language feature.
-    # It auto-filters response.parts for text-type parts and concatenates them into a plain string.
-    return response.text
+    # return the reponse that will be used by the robot to be spoken to the user 
+    # and an the repeat check and user tone to change JD's mood accordingly
+    return result.response, result.is_repeat, result.user_tone
+
 
 # UNCOMMENT if you want to use eleven labs
 # async def text_to_speech(text: str) -> bytes:
