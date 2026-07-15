@@ -34,6 +34,7 @@ with open(os.path.join(os.path.dirname(__file__), "robot_profile.json"), "r") as
 IDENTITY_AND_CAPABILITIES = _profile["identity_and_capabilities"]
 DEFAULT_GUEST_PERSONA = _profile["default_guest_persona"]
 TONE_CLASSIFICATION_GUIDANCE = _profile["tone_classification_guidance"]
+MOOD_INFLUENCE_GUIDANCE = _profile["mood_influence_guidance"]
 SESSION_MAX_TURNS = _profile["memory_config"]["session_max_turns"]
 
 # In-session conversation memory, instantiated once at module load time,
@@ -44,10 +45,10 @@ SESSION_MAX_TURNS = _profile["memory_config"]["session_max_turns"]
 # reset on face-change and seeded from the DB once that work lands.
 conversation_memory = ConversationMemory(max_turns=SESSION_MAX_TURNS)
 
-
-async def get_llm_response(text: str, custom_personality: str | None = None) -> tuple[str, bool, str]:
+async def get_llm_response(text: str, custom_personality: str | None = None, mood_context: str | None = "neutral") -> tuple[str, bool, str]:
     persona = custom_personality if custom_personality else DEFAULT_GUEST_PERSONA
-    system_prompt = IDENTITY_AND_CAPABILITIES + "\n\n" + persona + "\n\n" + TONE_CLASSIFICATION_GUIDANCE
+    mood_line = f"JD's current mood is: {mood_context if mood_context else 'neutral'}." # neutral mood fallback
+    system_prompt = IDENTITY_AND_CAPABILITIES + "\n\n" + persona + "\n\n" + TONE_CLASSIFICATION_GUIDANCE + "\n\n" + MOOD_INFLUENCE_GUIDANCE + "\n\n" + mood_line
     # Evaluated at runtime (based on face recognition future work)       
 
     # Transform our internal {"user": ..., "jd": ...} turn dicts into the
