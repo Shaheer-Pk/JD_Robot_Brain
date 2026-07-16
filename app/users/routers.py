@@ -125,7 +125,13 @@ def enroll_user(
     # user ever created.
     embeddings: list[list[float]] = []
     rejected_filenames: list[str] = []
+
+    # DEBUGGING
+    print(f"DEBUG: Received {len(photos)} photos.")
     for photo in photos:
+        # DEBUGGING
+        print(f"DEBUG: Filename: {photo.filename}, Content-Type: {photo.content_type}")
+        
         raw_bytes = photo.file.read()
         result = extract_embedding(raw_bytes)
         if result is None:

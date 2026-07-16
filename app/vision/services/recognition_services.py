@@ -42,6 +42,11 @@ from app.vision.state import session, RETRY_INTERVAL_SECONDS, MAX_RECOGNITION_AT
 from app.vision.services.identification_services import identify_face
 from app.users.database import get_db
 
+CONFIDENCE_THRESHOLD = 0.2  # empirically tuned against one enrolled user
+# (6 embeddings): genuine matches scored 0.3-0.6, lookalike strangers
+# scored 0.1-0.12. Re-validate once a second real user is enrolled —
+# small-sample thresholds can compress with more real variation in the DB.
+
 
 def attempt_identification(image_bytes: bytes):
     if session.get_status() != "pending":
@@ -55,16 +60,26 @@ def attempt_identification(image_bytes: bytes):
     try:
         result = identify_face(db, image_bytes)
 
-        if result is not None:
+        # `result is None` MUST be checked first, combined via `or`, so
+        # Python's short-circuit evaluation never touches result.confidence
+        # on a None result (AttributeError otherwise). This branch covers
+        # BOTH "no face/embedding extracted at all" AND "a face was found
+        # but confidence too low to trust" — both correctly fall through
+        # to attempts-then-guest logic. A prior version of this function
+        # returned early on None specifically, which silently skipped
+        # incrementing attempts — unmatched guests were re-attempted
+        # indefinitely instead of ever reaching MAX_RECOGNITION_ATTEMPTS
+        # and falling back to guest. Fixed this session.
+        if result is None or result.confidence <= CONFIDENCE_THRESHOLD:
+            attempts = session.increment_recognition_attempts()
+
+            if attempts == 1:
+                session.queue_stall_phrase()
+
+            if attempts >= MAX_RECOGNITION_ATTEMPTS:
+                session.mark_guest()
+        else:
             session.mark_identified(result.user_id, result)
-            return
-
-        attempts = session.increment_recognition_attempts()
-        if attempts == 1:
-            session.queue_stall_phrase()
-
-        if attempts >= MAX_RECOGNITION_ATTEMPTS:
-            session.mark_guest()
 
     finally:
         try:

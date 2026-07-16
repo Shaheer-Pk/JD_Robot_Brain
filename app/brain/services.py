@@ -8,7 +8,7 @@ from piper import PiperVoice
 from google import genai
 from google.genai import types
 
-from app.shared.memory import ConversationMemory
+from app.shared.memory import memory_session
 
 # Importing from our env file (hidden)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -32,7 +32,6 @@ with open(os.path.join(os.path.dirname(__file__), "robot_profile.json"), "r") as
 # Key:Value pairs from \brain\robot_profile.json
 IDENTITY_AND_CAPABILITIES = _profile["identity_and_capabilities"]
 DEFAULT_GUEST_PERSONA = _profile["default_guest_persona"]
-SESSION_MAX_TURNS = _profile["memory_config"]["session_max_turns"]
 
 # In-session conversation memory, instantiated once at module load time,
 # same pattern as piper_voice and client above. Single source of truth
@@ -40,7 +39,10 @@ SESSION_MAX_TURNS = _profile["memory_config"]["session_max_turns"]
 # deliberately NOT used (see jd-context.md for the reasoning),
 # since this class needs to be the one thing that gets
 # reset on face-change and seeded from the DB once that work lands.
-conversation_memory = ConversationMemory(max_turns=SESSION_MAX_TURNS)
+
+# Commented this because made memory_session a single sharabale session to be utilized
+# over all modules as now vision/state.py will reset memory on_face_lost()
+#conversation_memory = ConversationMemory(max_turns=SESSION_MAX_TURNS)
 
 async def get_llm_response(text: str, custom_personality: dict | None = None) -> str:
     # In case vision was able to recognize and 
@@ -60,7 +62,7 @@ async def get_llm_response(text: str, custom_personality: dict | None = None) ->
     # stores turns. If the LLM provider or prompt format ever changes,
     # only this function needs to change, not the memory class.
     contents: list[types.Content] = []
-    for turn in conversation_memory.get_history():
+    for turn in memory_session.get_history():
         contents.append(
             types.Content(role="user", parts=[types.Part.from_text(text=turn["user"])])     # Here 'user' is the key in dict in app/shared/memory.py        
         )
@@ -83,7 +85,7 @@ async def get_llm_response(text: str, custom_personality: dict | None = None) ->
 
     # Store this exchange AFTER a successful response, so a failed/errored
     # call never gets recorded as if JD actually said something.
-    conversation_memory.add_turn(text, response.text)
+    memory_session.add_turn(text, response.text)
 
     # response.text is a Gemini SDK property, not a Python language feature.
     # It auto-filters response.parts for text-type parts and concatenates them into a plain string.

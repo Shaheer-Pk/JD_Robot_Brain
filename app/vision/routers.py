@@ -85,6 +85,7 @@ async def receive_frame(frame: UploadFile = File(...), background_tasks: Backgro
 
     else:
         session.on_face_lost()
+        session.expire_stale_session_if_needed()
 
     return StreamStatusResponse (
         face_present = face_present,
