@@ -13,7 +13,7 @@ from app.shared.memory import memory_session
 # Importing from our env file (hidden)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 # Load the Piper voice once at module load time, same pattern as the Gemini client
-piper_voice = PiperVoice.load("voices/en_US-danny-low.onnx")
+piper_voice = PiperVoice.load("voices/en-US-cori-medium.onnx")
 
 # ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")          # Uncomment when using elevenlabs and not piper
 # ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")
