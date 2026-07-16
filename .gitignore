@@ -1,14 +1,24 @@
 # Ignoring my virtual env (redundant safety check)
 my_venv
+.myvenv
+venv_bridge
 
 # Ignore any cache files or folders generated inside arc_project
 arc_project/*cache*/
 *.cache
 
+# Ignoring sqlite3 local generate database
+*.db
+
+# Ignoring the files created by sqlite3 WAL mode
+*.db-wal
+*.db-shm
+
 #Ignoring env
 .env
 
 # The context file to keep me updated on the path i am working on
+context
 jd-context.md
 project_scope.txt
 

@@ -8,10 +8,12 @@ from piper import PiperVoice
 from google import genai
 from google.genai import types
 
+from app.shared.memory import memory_session
+
 # Importing from our env file (hidden)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 # Load the Piper voice once at module load time, same pattern as the Gemini client
-piper_voice = PiperVoice.load("voices/en_US-danny-low.onnx")
+piper_voice = PiperVoice.load("voices/en-US-cori-medium.onnx")
 
 # ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")          # Uncomment when using elevenlabs and not piper
 # ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")
@@ -31,18 +33,62 @@ with open(os.path.join(os.path.dirname(__file__), "robot_profile.json"), "r") as
 IDENTITY_AND_CAPABILITIES = _profile["identity_and_capabilities"]
 DEFAULT_GUEST_PERSONA = _profile["default_guest_persona"]
 
+# In-session conversation memory, instantiated once at module load time,
+# same pattern as piper_voice and client above. Single source of truth
+# for this session's turn history — Gemini's own chat-history feature is
+# deliberately NOT used (see jd-context.md for the reasoning),
+# since this class needs to be the one thing that gets
+# reset on face-change and seeded from the DB once that work lands.
 
-async def get_llm_response(text: str, custom_personality: str | None = None) -> str:
-    persona = custom_personality if custom_personality else DEFAULT_GUEST_PERSONA
+# Commented this because made memory_session a single sharabale session to be utilized
+# over all modules as now vision/state.py will reset memory on_face_lost()
+#conversation_memory = ConversationMemory(max_turns=SESSION_MAX_TURNS)
+
+async def get_llm_response(text: str, custom_personality: dict | None = None) -> str:
+    # In case vision was able to recognize and 
+    # send custom_personality over to brain/routers.py
+    # Otherwise router keeps this as none, which means load
+    # default guest persona from robot_profile.json
+    if custom_personality:
+        persona = f"You are talking with {custom_personality['name']}. Behave towards them as follows: {custom_personality['persona']}"
+    else:
+        persona = DEFAULT_GUEST_PERSONA
     system_prompt = IDENTITY_AND_CAPABILITIES + "\n\n" + persona        # Evaluated at runtime (based on face recognition future work)
 
+    # Transform our internal {"user": ..., "jd": ...} turn dicts into the
+    # role-tagged types.Content objects Gemini's contents parameter expects.
+    # This translation lives here, not in ConversationMemory, because the
+    # memory class has zero knowledge of Gemini's prompt schema — it just
+    # stores turns. If the LLM provider or prompt format ever changes,
+    # only this function needs to change, not the memory class.
+    contents: list[types.Content] = []
+    for turn in memory_session.get_history():
+        contents.append(
+            types.Content(role="user", parts=[types.Part.from_text(text=turn["user"])])     # Here 'user' is the key in dict in app/shared/memory.py        
+        )
+        contents.append(
+            types.Content(role="model", parts=[types.Part.from_text(text=turn["jd"])])      # Same as 'user'
+        )
+
+    # The new incoming question is appended last, after all prior history.
+    contents.append(
+        types.Content(role="user", parts=[types.Part.from_text(text=text)])
+    )
+
     response = await client.aio.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=text,
+        model="gemini-3.1-flash-lite",
+        contents=contents,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt
         )
     )
+
+    # Store this exchange AFTER a successful response, so a failed/errored
+    # call never gets recorded as if JD actually said something.
+    memory_session.add_turn(text, response.text)
+
+    # response.text is a Gemini SDK property, not a Python language feature.
+    # It auto-filters response.parts for text-type parts and concatenates them into a plain string.
     return response.text
 
 # UNCOMMENT if you want to use eleven labs
