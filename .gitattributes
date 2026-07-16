@@ -1,0 +1,2 @@
+D:/ARC[[:space:]]JD[[:space:]]Project/JD_Robot_Brain/voices/en-US-cori-medium.onnx filter=lfs diff=lfs merge=lfs -text
+D:/ARC[[:space:]]JD[[:space:]]Project/JD_Robot_Brain/voices/en_US-danny-low.onnx.json filter=lfs diff=lfs merge=lfs -text
