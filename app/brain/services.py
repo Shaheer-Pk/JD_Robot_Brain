@@ -16,7 +16,8 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 # Load the Piper voice once at module load time, same pattern as the Gemini client
 piper_voice = PiperVoice.load("voices/en_US-danny-low.onnx")
 
-# ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")          # Uncomment when using elevenlabs and not piper
+# Uncomment when using elevenlabs and not piper
+# ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")          
 # ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")
 
 # Load robot_profile.json once at module load time, never re-read per request
@@ -81,7 +82,7 @@ async def get_llm_response(text: str, custom_personality: str | None = None, moo
 )
     )
 
-    result: LLMTurnResult = response.parsed     # parse once, store in a variable
+    result: LLMTurnResult = response.parsed     # parse once, store in a variable (use LLMTurnResult class schema)
 
     # Store this exchange AFTER a successful response, so a failed/errored
     # call never gets recorded as if JD actually said something.

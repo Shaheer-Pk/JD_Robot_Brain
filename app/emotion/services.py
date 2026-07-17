@@ -79,13 +79,13 @@ def apply_event(is_repeat: bool, user_tone: str):
       2. Add whatever just happened on top of that already-decayed value or 
          just add the decay in case of neutral conversation
       3. Clamp the result so it can never go past -1.0 or +1.0.
-      4. Save it - which also resets the idle/sleepy timer.
+      4. Save it to update mood value - which also resets the sleepy timer.
 
     user_tone is expected to be exactly one of "nice", "rude", "neutral" -
     enforced upstream by Gemini's locked response schema, so no other
     value should EVER reach this function.
     """
-    raw_value, last_updated = mood_state.read()
+    raw_value, last_updated = mood_state.read()         # Read current mood
     current_value = _decayed_value(raw_value, last_updated)     # Add decay based on time elapsed
 
     # Change for mode represented by delta
@@ -102,7 +102,7 @@ def apply_event(is_repeat: bool, user_tone: str):
     # Removed a check for delta==0.0 as we want the natural decay to
     # happen even in the case of a neutral conversation the same way
 
-    new_value = current_value + delta       # Update the new mood value (decay + change)
+    new_value = current_value + delta           # Update the new mood value (decay + change)
     new_value = max(-1.0, min(1.0, new_value))  # clamp to the dial's range
 
     mood_state.write(new_value)     # Updates the last interaction and last update here
