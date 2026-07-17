@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from app.hearing.schemas import TranscribeResponse
 from app.hearing.services import transcribe_audio
@@ -24,7 +26,7 @@ async def transcribe(audio: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Empty audio file received.")
 
     try:
-        is_speech, transcript = transcribe_audio(audio_bytes)
+        is_speech, transcript = await asyncio.to_thread(transcribe_audio, audio_bytes)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription pipeline failed: {str(e)}")
 

@@ -8,13 +8,13 @@ from piper import PiperVoice
 from google import genai
 from google.genai import types
 
-from app.shared.memory import ConversationMemory
 from app.brain.schemas import LLMTurnResult
+from app.shared.memory import memory_session
 
 # Importing from our env file (hidden)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 # Load the Piper voice once at module load time, same pattern as the Gemini client
-piper_voice = PiperVoice.load("voices/en_US-danny-low.onnx")
+piper_voice = PiperVoice.load("voices/en-US-cori-medium.onnx")
 
 # Uncomment when using elevenlabs and not piper
 # ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")          
@@ -36,7 +36,6 @@ IDENTITY_AND_CAPABILITIES = _profile["identity_and_capabilities"]
 DEFAULT_GUEST_PERSONA = _profile["default_guest_persona"]
 TONE_CLASSIFICATION_GUIDANCE = _profile["tone_classification_guidance"]
 MOOD_INFLUENCE_GUIDANCE = _profile["mood_influence_guidance"]
-SESSION_MAX_TURNS = _profile["memory_config"]["session_max_turns"]
 
 # In-session conversation memory, instantiated once at module load time,
 # same pattern as piper_voice and client above. Single source of truth
@@ -44,13 +43,21 @@ SESSION_MAX_TURNS = _profile["memory_config"]["session_max_turns"]
 # deliberately NOT used (see jd-context.md for the reasoning),
 # since this class needs to be the one thing that gets
 # reset on face-change and seeded from the DB once that work lands.
-conversation_memory = ConversationMemory(max_turns=SESSION_MAX_TURNS)
 
-async def get_llm_response(text: str, custom_personality: str | None = None, mood_context: str | None = "neutral") -> tuple[str, bool, str]:
-    persona = custom_personality if custom_personality else DEFAULT_GUEST_PERSONA
+async def get_llm_response(text: str, custom_personality: dict | None = None, mood_context: str | None = "neutral") -> tuple[str, bool, str]:
+    # In case vision was able to recognize and 
+    # send custom_personality over to brain/routers.py
+    # Otherwise router keeps this as none, which means load
+    # default guest persona from robot_profile.json
+    if custom_personality:
+        persona = f"You are talking with {custom_personality['name']}. Behave towards them as follows: {custom_personality['persona']}"
+    else:
+        persona = DEFAULT_GUEST_PERSONA
     mood_line = f"JD's current mood is: {mood_context if mood_context else 'neutral'}." # neutral mood fallback
     system_prompt = IDENTITY_AND_CAPABILITIES + "\n\n" + persona + "\n\n" + TONE_CLASSIFICATION_GUIDANCE + "\n\n" + MOOD_INFLUENCE_GUIDANCE + "\n\n" + mood_line
-    # Evaluated at runtime (based on face recognition future work)       
+    # Evaluated at runtime (based on face recognition)       
+    # Commented this because made memory_session a single sharabale session to be utilized
+    # over all modules as now vision/state.py will reset memory on_face_lost()
 
     # Transform our internal {"user": ..., "jd": ...} turn dicts into the
     # role-tagged types.Content objects Gemini's contents parameter expects.
@@ -59,7 +66,7 @@ async def get_llm_response(text: str, custom_personality: str | None = None, moo
     # stores turns. If the LLM provider or prompt format ever changes,
     # only this function needs to change, not the memory class.
     contents: list[types.Content] = []
-    for turn in conversation_memory.get_history():
+    for turn in memory_session.get_history():
         contents.append(
             types.Content(role="user", parts=[types.Part.from_text(text=turn["user"])])     # Here 'user' is the key in dict in app/shared/memory.py        
         )
@@ -86,7 +93,8 @@ async def get_llm_response(text: str, custom_personality: str | None = None, moo
 
     # Store this exchange AFTER a successful response, so a failed/errored
     # call never gets recorded as if JD actually said something.
-    conversation_memory.add_turn(text, result.response)
+    memory_session.add_turn(text, response.text)
+
 
     # return the reponse that will be used by the robot to be spoken to the user 
     # and an the repeat check and user tone to change JD's mood accordingly
