@@ -30,11 +30,12 @@ boundary: brain/services.py should depend on "a name and a persona
 string," not on vision's internal return shape — if identify_face's
 return shape changes later, brain/ doesn't silently break.
 """
+import json  # for serializing the verified action triple into a response header
 
 from fastapi import APIRouter
 from fastapi.responses import Response
 from app.brain.schemas import ChatRequest
-from app.brain.services import get_llm_response, text_to_speech
+from app.brain.services import get_llm_response, text_to_speech, verify_action
 from app.emotion.services import apply_event, get_current_preset   # read + write
 from app.vision.state import session
 
@@ -53,12 +54,32 @@ async def chat(request: ChatRequest):
     current_mood = get_current_preset()
 
     # Brain/services Gemini call         
-    spoken_text, is_repeat, user_tone = await get_llm_response(request.text,
+    spoken_text, is_repeat, user_tone, action_keyword = await get_llm_response(request.text,
                                                                custom_personality=custom_personality,
                                                                mood_context=current_mood)
     # apply event from emotions module for mood to affect the response (write after response)
     apply_event(is_repeat, user_tone)
 
+    # NEW — the guardrail. verified_action is either None (no action
+    # wanted, or Gemini hallucinated something not on the whitelist) or
+    # the real [gadget, cmd, param] triple, correctly cased, ready for
+    # ARC to execute blindly with zero validation on its side.
+    verified_action = verify_action(action_keyword)
+
     # Take above spoken_text and perform Piper TTS     
     audio_bytes = await text_to_speech(spoken_text)         # spoken text -> audio bytes
-    return Response(content=audio_bytes, media_type="audio/wav")    # wav format through piper tts (for elevenlab its mpeg)
+    response = Response(content=audio_bytes, media_type="audio/wav")    # wav format through piper tts (for elevenlab its mpeg)
+
+    # NEW — action is carried out-of-band from the audio body via a
+    # custom response header, since Response(content=..., media_type=...)
+    # has no field for a second structured payload alongside raw bytes.
+    # Header is OMITTED ENTIRELY when there's no action — C# checks for
+    # the header's presence rather than parsing a magic "null" string,
+    # avoiding an extra layer of string-based special-casing on that side.
+    if verified_action is not None:
+        response.headers["X-JD-Action"] = json.dumps(verified_action)
+        print(f"[Brain] X-JD-Action header set: {response.headers['X-JD-Action']}")
+    else:
+        print("[Brain] No X-JD-Action header sent this turn.")
+
+    return response

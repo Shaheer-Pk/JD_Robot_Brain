@@ -4,7 +4,7 @@
   "nice_bonus": 0.3,
   "decay_per_minute": 0.2,
   "hysteresis_buffer": 0.05,
-  "sleepy_idle_minutes": 5,
+  "sleepy_idle_minutes": 0.5,
   "bands": {
     "angry":   [-1.0, -0.6],
     "annoyed": [-0.6, -0.2],
