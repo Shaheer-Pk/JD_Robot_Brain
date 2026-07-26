@@ -63,7 +63,7 @@ _NORMALIZED_ACTIONS = {k.strip().lower(): v for k, v in POSSIBLE_ACTIONS.items()
 ACTION_LIST_TEXT = ", ".join(POSSIBLE_ACTIONS.keys())
 
 
-async def get_llm_response(text: str, custom_personality: dict | None = None, mood_context: str | None = "neutral") -> tuple[str, bool, str]:
+async def get_llm_response(text: str, custom_personality: dict | None = None, mood_context: str | None = "neutral") -> tuple[str, bool, str, list[str] | None]:
     # In case vision was able to recognize and 
     # send custom_personality over to brain/routers.py
     # Otherwise router keeps this as none, which means load
@@ -75,15 +75,32 @@ async def get_llm_response(text: str, custom_personality: dict | None = None, mo
 
     mood_line = f"JD's current mood is: {mood_context if mood_context else 'neutral'}." # neutral mood fallback
 
-    # NEW — instructs Gemini on when/how to request a physical action.
-    # Built from the same POSSIBLE_ACTIONS dict verify_action() checks
-    # against below, so the prompt and the guardrail can never silently
-    # drift out of sync with each other.
+    # CHANGED this session — instructs Gemini it may now return MULTIPLE
+    # actions, in the order they should execute, not just one. Built from
+    # the same POSSIBLE_ACTIONS dict verify_actions() checks against
+    # below, so the prompt and the guardrail can never silently drift out
+    # of sync with each other.
+    #
+    # The ordering/prerequisite instruction below is a real, deliberate
+    # mitigation for the exact bug this feature was built to fix
+    # (Gemini asking for a pose-dependent action like a dance without
+    # first requesting the stand-up action it physically requires) — it
+    # is a PROMPT-LEVEL nudge only, not a guarantee. verify_actions()
+    # does NOT reject or reorder based on pose correctness; there is no
+    # server-side pose-prerequisite enforcement yet (tracking JD's
+    # current resting pose and feeding it back into this prompt was
+    # discussed and deliberately parked as separate, not-yet-built future
+    # work — do not assume this comment means it is already handled).
     action_guidance = (
-        f"If a physical action or sound genuinely fits this moment, choose exactly "
-        f"one from this list: {ACTION_LIST_TEXT}. Return it in the action field. "
-        f"If none fit, or you are unsure, return null for action. Do not invent "
-        f"an action name that is not in this list."
+        f"If one or more physical actions or sounds genuinely fit this moment, "
+        f"choose from this list: {ACTION_LIST_TEXT}. Return them as a list of "
+        f"keywords in the actions field, IN THE ORDER they should execute. "
+        f"Some actions require a specific starting pose (e.g. a standing dance "
+        f"cannot run from a seated position) — if the action you want requires "
+        f"a pose JD may not currently be in, include the necessary pose-change "
+        f"action(s) first in the list. If none fit, or you are unsure, return "
+        f"null or an empty list. Do not invent an action name that is not in "
+        f"this list."
     )
 
     system_prompt = IDENTITY_AND_CAPABILITIES + "\n\n" + persona + "\n\n" + TONE_CLASSIFICATION_GUIDANCE + "\n\n" + MOOD_INFLUENCE_GUIDANCE + "\n\n" + mood_line + "\n\n" + action_guidance
@@ -126,10 +143,10 @@ async def get_llm_response(text: str, custom_personality: dict | None = None, mo
     # DEBUG — permanent diagnostic, same convention as vision/state.py's
     # debug prints. Shows exactly what Gemini returned before any
     # verification touches it — critical for telling "Gemini never wanted
-    # an action" apart from "Gemini wanted one but it got rejected."
-    # !r gives you the repr() so None gets printed as None.
-    # but a string prints with quotes ('Bow', or '  bow ' if there's hidden whitespace)
-    print(f"[Brain] Gemini raw action returned: {result.action!r}")
+    # any action" apart from "Gemini wanted some, but one or all got
+    # rejected." !r gives you the repr() so None prints as None and an
+    # empty list prints as [] (visibly distinct from a populated list).
+    print(f"[Brain] Gemini raw actions returned: {result.actions!r}")
 
     # Store this exchange AFTER a successful response, so a failed/errored
     # call never gets recorded as if JD actually said something.
@@ -138,59 +155,85 @@ async def get_llm_response(text: str, custom_personality: dict | None = None, mo
 
     # return the response that will be used by the robot to be spoken to the user,
     # the repeat check and user tone to change JD's mood accordingly, and NOW
-    # also the raw action keyword Gemini picked (or None) — unverified at
-    # this point, verify_action() (below) is what actually validates it.
-    return result.response, result.is_repeat, result.user_tone, result.action
+    # also the raw, ORDERED list of action keywords Gemini picked (or None/
+    # empty) — unverified at this point, verify_actions() (below) is what
+    # actually validates each item.
+    return result.response, result.is_repeat, result.user_tone, result.actions
 
 
-def verify_action(action_keyword: str | None) -> list[str] | None:
+def verify_actions(action_keywords: list[str] | None) -> list[list[str]] | None:
     """
-    The guardrail between Gemini's freeform action guess and ARC actually
-    executing anything. This is the ONLY place a Gemini-suggested action
-    is checked against the real whitelist — routers.py trusts whatever
-    this function returns without re-validating.
+    CHANGED this session — was verify_action() (singular), checking one
+    keyword. Now verify_actions() (plural): checks an ORDERED LIST of
+    keywords, since Gemini can now request more than one action per turn
+    (e.g. stand up, then dance). This is still the ONLY place a
+    Gemini-suggested action is checked against the real whitelist —
+    routers.py trusts whatever this function returns without
+    re-validating, exactly as before.
 
-    Two cases collapse to the same None result, deliberately NOT
-    distinguished for the caller: (1) Gemini genuinely decided no action
-    fit ("action": null), and (2) Gemini hallucinated a keyword that
-    isn't in POSSIBLE_ACTIONS at all. Both mean "ARC does nothing" —
-    there's no meaningful difference in outcome, so no need to raise or
-    log a special hallucination case here (that's a future
-    observability nice-to-have, not a correctness requirement).
+    PER-ITEM verification, NOT all-or-nothing (confirmed decision this
+    session): if the list contains one hallucinated/invalid keyword among
+    otherwise-valid ones, that ONE item is dropped and every other valid
+    item in the list is still kept, in its original relative order. A
+    single bad entry must not cost JD a perfectly good, verified
+    sequence — e.g. ["StandFromSit", "HallucinatedNonsense", "Wave"]
+    verifies to [StandFromSit's triple, Wave's triple], not None. This
+    mirrors the existing single-action design's philosophy at the
+    per-item level: a malformed/unmatched entry collapses to "that one
+    thing doesn't happen," never a whole-request failure.
 
-    Normalization: strips whitespace and lowercases before comparing
-    against _NORMALIZED_ACTIONS, since Gemini is a language model
+    Returns None (not an empty list) when nothing survives verification
+    — either Gemini returned null/an empty list to begin with, or every
+    item it did return was invalid. routers.py's existing
+    `if verified_actions is not None` check (see routers.py) then behaves
+    identically to the old single-action code path — no header sent.
+
+    Normalization: strips whitespace and lowercases before comparing each
+    keyword against _NORMALIZED_ACTIONS, since Gemini is a language model
     producing free text, not a strict enum picker — exact-match-only
     would silently reject valid actions over trivial casing/whitespace
-    differences.
+    differences. Unchanged from the original single-action design.
+
+    NOTE — pose/sequencing correctness (e.g. "don't dance before you
+    stand up") is NOT enforced here. This function only checks "is this
+    keyword a real, whitelisted action" — it has no concept of JD's
+    current physical pose and does not reorder, insert, or reject items
+    based on prerequisites. That reasoning is currently pushed entirely
+    onto Gemini via the action_guidance prompt text (see
+    get_llm_response() above) — a real, known gap, not an oversight.
+    Actually PREVENTING servo damage from a genuinely wrong pose sequence
+    still rests on your own manual/testing verification of what
+    sequences you allow through, not on this function.
     """
-    if action_keyword is None:
-        print("[Verify] No action requested — Gemini returned null.")
+    if not action_keywords:
+        # Covers both None and an empty list — Gemini is instructed to
+        # use either for "no action this turn" (see action_guidance).
+        print("[Verify] No actions requested — Gemini returned null/empty list.")
         return None
 
-    normalized = action_keyword.strip().lower()
+    verified: list[list[str]] = []
+    for keyword in action_keywords:
+        if keyword is None:
+            continue
 
-    # normalized is already clean by this point (stripped/lowercased above).
-    # .get() does a plain O(1) dict lookup against _NORMALIZED_ACTIONS' own
-    # pre-normalized keys (normalized once, at import time). Returns the
-    # matching triple (e.g. ["Auto Position", "AutoPositionAction", "Bow"])
-    # if found, or None by default if the key doesn't exist — no KeyError,
-    # no special-casing needed for "not a real action."
-    result = _NORMALIZED_ACTIONS.get(normalized)
+        normalized = keyword.strip().lower()
 
-    # DEBUG — permanent diagnostic. Shows the accept/reject decision AND
-    # the reasoning: normalized form used for matching, and either the
-    # matched triple or an explicit rejection. This is the single most
-    # useful line for diagnosing "why didn't JD move" — tells you
-    # immediately whether it was a genuine no-action turn, a hallucinated
-    # keyword, or a real match that failed somewhere downstream instead.
-    if result is None:
-        print(f"[Verify] REJECTED — '{action_keyword}' (normalized: '{normalized}') not found in whitelist.")
-    else:
-        print(f"[Verify] ACCEPTED — '{action_keyword}' matched -> {result}")
+        # Same O(1) lookup against the pre-normalized dict as the
+        # original single-action design — just called once per item now.
+        result = _NORMALIZED_ACTIONS.get(normalized)
 
-     
-    return result
+        if result is None:
+            print(f"[Verify] REJECTED — '{keyword}' (normalized: '{normalized}') not found in whitelist. Dropped; rest of the batch still evaluated.")
+            continue
+
+        print(f"[Verify] ACCEPTED — '{keyword}' matched -> {result}")
+        verified.append(result)
+
+    if not verified:
+        print("[Verify] No valid actions survived verification for this turn.")
+        return None
+
+    return verified
 
 
 # UNCOMMENT if you want to use eleven labs
