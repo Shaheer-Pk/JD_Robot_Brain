@@ -30,11 +30,12 @@ boundary: brain/services.py should depend on "a name and a persona
 string," not on vision's internal return shape — if identify_face's
 return shape changes later, brain/ doesn't silently break.
 """
+import json  # for serializing the verified action triple into a response header
 
 from fastapi import APIRouter
 from fastapi.responses import Response
 from app.brain.schemas import ChatRequest
-from app.brain.services import get_llm_response, text_to_speech
+from app.brain.services import get_llm_response, text_to_speech, verify_actions
 from app.emotion.services import apply_event, get_current_preset   # read + write
 from app.vision.state import session
 
@@ -52,13 +53,52 @@ async def chat(request: ChatRequest):
     # Read mood before Gemini call
     current_mood = get_current_preset()
 
-    # Brain/services Gemini call         
-    spoken_text, is_repeat, user_tone = await get_llm_response(request.text,
+    # Brain/services Gemini call — action_keywords is now an ORDERED LIST
+    # (or None/empty), not a single keyword. See schemas.py's
+    # LLMTurnResult.actions and services.py's action_guidance for why.
+    spoken_text, is_repeat, user_tone, action_keywords = await get_llm_response(request.text,
                                                                custom_personality=custom_personality,
                                                                mood_context=current_mood)
     # apply event from emotions module for mood to affect the response (write after response)
     apply_event(is_repeat, user_tone)
 
+    # CHANGED — the guardrail, now plural. verified_actions is either
+    # None (no action wanted this turn, or every requested keyword was
+    # invalid) or an ORDERED LIST of [gadget, cmd, param] triples, each
+    # correctly cased, ready for ARC to execute blindly and sequentially,
+    # in this exact order, with zero validation on its side. A single
+    # hallucinated keyword no longer costs the whole batch — see
+    # verify_actions()'s docstring in services.py.
+    verified_actions = verify_actions(action_keywords)
+
     # Take above spoken_text and perform Piper TTS     
     audio_bytes = await text_to_speech(spoken_text)         # spoken text -> audio bytes
-    return Response(content=audio_bytes, media_type="audio/wav")    # wav format through piper tts (for elevenlab its mpeg)
+    response = Response(content=audio_bytes, media_type="audio/wav")    # wav format through piper tts (for elevenlab its mpeg)
+
+    # CHANGED — actions are still carried out-of-band from the audio body
+    # via the same custom X-JD-Action response header (deliberately kept
+    # in the existing /brain/chat response rather than moved to a
+    # separate endpoint — actions have no independent existence outside a
+    # single Gemini turn, unlike mood, which is why mood got its own
+    # GET /emotion/state endpoint and actions did not).
+    #
+    # The header value is now a JSON array OF ARRAYS — a list of
+    # [gadget, cmd, param] triples instead of one bare triple — e.g.
+    # [["Auto Position","AutoPositionActionWait","StandFromSit"],
+    #  ["Auto Position","AutoPositionActionWait","Wave"]]
+    # json.dumps handles the extra nesting level with zero extra work;
+    # C# already parses this with JArray.Parse, which handles nested
+    # arrays exactly as well as flat ones — only the C#-side loop over
+    # the outer array is new, not the parsing mechanism itself.
+    #
+    # Header is still OMITTED ENTIRELY when there are no verified actions
+    # — verify_actions() already collapses "Gemini wanted nothing" and
+    # "every requested keyword was invalid" to the same None, so this
+    # check needs no changes beyond the variable's new name.
+    if verified_actions is not None:
+        response.headers["X-JD-Action"] = json.dumps(verified_actions)
+        print(f"[Brain] X-JD-Action header set: {response.headers['X-JD-Action']}")
+    else:
+        print("[Brain] No X-JD-Action header sent this turn.")
+
+    return response

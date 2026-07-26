@@ -8,6 +8,8 @@ channel is built, whatever get_current_preset() returns gets pushed to
 ARC's C# skill instead of (or as well as) sitting behind this route.
 """
 
+import asyncio
+
 from fastapi import APIRouter
 
 from app.emotion.services import get_current_preset, get_eye_preset_details, get_current_mood_value
@@ -23,9 +25,17 @@ async def get_emotion_state():
     it should trigger - all computed fresh on every call from the decay
     math in services.py. Nothing here is cached.
     """
-    preset = get_current_preset()
-    details = get_eye_preset_details(preset)
-    current_value = get_current_mood_value()
+
+    # Run independent synchronous calls concurrently in worker threads
+    preset_task = asyncio.to_thread(get_current_preset)
+    current_value_task = asyncio.to_thread(get_current_mood_value)
+
+    # Wait for both to finish in parallel
+    preset, current_value = await asyncio.gather(preset_task, current_value_task)
+
+    # Run details after preset is known
+    details = await asyncio.to_thread(get_eye_preset_details, preset)
+    
 
     return EmotionStateResponse(
         preset=preset,
