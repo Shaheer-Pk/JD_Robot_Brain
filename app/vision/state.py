@@ -60,7 +60,7 @@ from app.shared.memory import memory_session
 
 from app.vision.schemas import VisionProfile
 
-FLICKER_TOLERANCE = 2          # seconds — brief disappearance still counts as the same person
+FLICKER_TOLERANCE = 10          # seconds — brief disappearance still counts as the same person
 RETRY_INTERVAL_SECONDS = 0.5   # only re-attempt recognition after this much time
 MAX_RECOGNITION_ATTEMPTS = 2   # give up and default to guest after this many failed attempts
 
