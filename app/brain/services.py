@@ -62,7 +62,11 @@ _NORMALIZED_ACTIONS = {k.strip().lower(): v for k, v in POSSIBLE_ACTIONS.items()
 # deciding "does a physical action fit this moment."
 ACTION_LIST_TEXT = ", ".join(POSSIBLE_ACTIONS.keys())
 
-
+# get_llm_response is kept async def because it awaits
+# gemini response. As a result this method SHOULD NOT BE
+# WRAPPED in a asyncio.to_thread() block in brain/routers.py
+# just like text_to_speech has been wrapped and is kept as a plain
+# 'def' (not async def).
 async def get_llm_response(text: str, custom_personality: dict | None = None, mood_context: str | None = "neutral") -> tuple[str, bool, str, list[str] | None]:
     # In case vision was able to recognize and 
     # send custom_personality over to brain/routers.py
@@ -251,7 +255,11 @@ def verify_actions(action_keywords: list[str] | None) -> list[list[str]] | None:
 #         return response.content
 
 # Piper version
-async def text_to_speech(text: str) -> bytes:
+# Not kept 'async def' because there is no genuine await
+# present here and in brain/routers.py its wrapped in
+# asyncio.to_thread() which expects SYNCHRONUS BLOCKING CALLS
+# Not async def
+def text_to_speech(text: str) -> bytes:
     buffer = io.BytesIO()
     with wave.open(buffer, "wb") as wav_file:
         piper_voice.synthesize_wav(text, wav_file)
