@@ -1,3 +1,8 @@
+# Ignoring test scripts
+test.py
+test_memory.py
+test_actions.py
+
 # Ignoring my virtual env (redundant safety check)
 my_venv
 .myvenv

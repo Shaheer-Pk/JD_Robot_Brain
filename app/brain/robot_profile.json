@@ -4,115 +4,115 @@
   "tone_classification_guidance": "Classify user_tone based on how the user is speaking to you, not what they're asking about. 'nice' requires genuine praise or enthusiasm, e.g. 'you're so helpful' or 'that's amazing, thank you!' - not bare politeness. 'rude' requires actual rudeness, insults, or hostility, e.g. 'that's a stupid answer' or dismissive/insulting language. Plain courtesy words like 'thanks', 'ok', 'cool', or 'please' are 'neutral' - they do not count as 'nice'. Most conversation is 'neutral'. Only classify 'nice' or 'rude' when the tone is clearly and genuinely one of those two.",
   "mood_influence_guidance": "You will be told JD's current mood band as part of this prompt. Let it subtly shape your wording, but never let it override being helpful. 'angry' - keep responses noticeably short and clipped, low patience with a bit of anger, but still a bit civil. 'annoyed' - slightly shorter and more terse than usual, a bit less patient and show that you are annoyed a bit 'neutral' - respond exactly as you normally would, no change. 'happy' - slightly warmer and friendlier than usual. 'excited' - noticeably more enthusiastic, warm, and energetic. 'sleepy' - responses can be a touch slower-feeling and low-energy, occasionally mentioning feeling a bit tired, but still fully helpful.",
   "possible_action_list": {
-    "Bow": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Bow"
-    ],
-    "Fly": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Fly"
-    ],
-    "Getup": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Getup"
-    ],
-    "Gorilla": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Gorilla"
-    ],
-    "Grab": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Grab"
-    ],
-    "Headstand": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Headstand"
-    ],
-    "Kick": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Kick"
-    ],
-    "PassTheMic": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Pass the Mic"
-    ],
-    "Point": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Point"
-    ],
-    "Pushups": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Pushups"
-    ],
-    "Shimmy": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Shimmy"
-    ],
-    "SitDown": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Sit Down"
-    ],
-    "SitWave": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Sit Wave"
-    ],
-    "Situps": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Situps"
-    ],
-    "Splits": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Splits"
-    ],
-    "StandFromSit": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Stand From Sit"
-    ],
-    "StopMoving": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Stop"
-    ],
-    "Summersault": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Summersault"
-    ],
-    "Thinking": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Thinking"
-    ],
-    "ThrowMic": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Throw Mic"
-    ],
-    "Wave": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "Wave"
-    ],
-    "YMCADance": [
-      "Auto Position",
-      "AutoPositionActionWait",
-      "YMCA Dance"
-    ]
+    "Bow": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Bow"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "DiscoDance": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Disco Dance"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Fly": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Fly"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Gorilla": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Gorilla"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Grab": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Grab"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Headstand": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Headstand"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Kick": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Kick"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Pushups": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Pushups"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "PassTheMic": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Pass the Mic"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Point": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Point"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Shimmy": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Shimmy"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Situps": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Situps"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Splits": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Splits"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "StopMoving": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Stop"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Summersault": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Summersault"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Thinking": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Thinking"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "ThrowMic": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Throw Mic"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "Wave": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Wave"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "YMCADance": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "YMCA Dance"],
+      "requires_pose": "standing",
+      "results_pose": "standing"
+    },
+    "SitDown": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Sit Down"],
+      "requires_pose": "standing",
+      "results_pose": "sitting"
+    },
+    "SitWave": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Sit Wave"],
+      "requires_pose": "sitting",
+      "results_pose": "sitting"
+    },
+    "StandFromSit": {
+      "triple": ["Auto Position", "AutoPositionActionWait", "Stand From Sit"],
+      "requires_pose": "sitting",
+      "results_pose": "standing"
+    }
   }
 }
