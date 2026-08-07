@@ -161,7 +161,7 @@ async def get_llm_response(
     )
  
     response = await client.aio.models.generate_content(
-        model="gemini-3.5-flash-lite",
+        model="gemini-3.1-flash-lite",
         contents=contents,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
