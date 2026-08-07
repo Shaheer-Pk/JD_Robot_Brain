@@ -12,6 +12,47 @@ class ConversationMemory:
     reset() and seed() are intentionally unused right now. They exist as
     forward-compatible hooks for the future face-recognition trigger
     (reset on new face) and DB-loaded history (seed on recognized user).
+
+    ACTION-HISTORY DESIGN NOTE — added this session, NO STRUCTURAL CHANGE
+    MADE. As of this session, brain/routers.py records executed physical
+    action history by APPENDING a human-readable note directly onto the
+    `jd_text` string BEFORE calling add_turn() — e.g. "Sure!" becomes
+    "Sure! [JD physically performed: StandFromSit, Wave]". This class's
+    shape and add_turn()'s 2-argument signature are UNCHANGED — action
+    history is fused into the existing `jd` field, not stored as a third
+    field.
+
+    This was a deliberate, discussed tradeoff, not an oversight:
+    - Chosen because Gemini's own Content/Part API has no separate
+      channel for "action" data distinct from spoken text anyway — a
+      3rd field would still collapse into one concatenated string by
+      the time it reaches Gemini's prompt, just built one layer later
+      (in services.py instead of here).
+    - Chosen because it required zero changes to this class's signature,
+      zero changes to get_history()'s callers, and zero changes to
+      services.py's history-reconstruction loop — smallest possible
+      blast radius on the one file this project's own history
+      (refinement-optimization.md) already flagged as too risky to
+      touch carelessly close to a deadline.
+
+    KNOWN, ACCEPTED DOWNSIDE — worth reading before extending this
+    further: because the action note is permanently fused into
+    `jd_text`, a stored turn cannot be cleanly split back into "what JD
+    said" vs. "what JD did" for any future purpose (e.g. separate
+    display, separate logging, separate analytics) without fragile
+    string-parsing.
+
+    RECOMMENDATION FOR FUTURE SCALABILITY, IF THIS PROJECT CONTINUES
+    PAST ITS CURRENT DEMO SCOPE: break `_history` into a genuine 3-field
+    shape — {"user": str, "jd": str, "actions": list[str] | None} — with
+    add_turn() gaining a third optional parameter, and let
+    services.py's Content-building loop concatenate `jd` + `actions`
+    into the single string Gemini's API requires AT THAT POINT, not
+    here. This restores a clean separation of concerns at the storage
+    layer, at the cost of updating every caller of add_turn() and
+    get_history() — a real but bounded, well-understood migration,
+    deliberately deferred rather than attempted under this session's
+    time constraints.
     """
 
     def __init__(self, max_turns: int):
