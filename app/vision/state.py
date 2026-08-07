@@ -60,11 +60,11 @@ from app.shared.memory import memory_session
 
 from app.vision.schemas import VisionProfile
 
-FLICKER_TOLERANCE = 10          # seconds — brief disappearance still counts as the same person
+FLICKER_TOLERANCE = 2         # seconds — brief disappearance still counts as the same person
 RETRY_INTERVAL_SECONDS = 0.5   # only re-attempt recognition after this much time
 MAX_RECOGNITION_ATTEMPTS = 2   # give up and default to guest after this many failed attempts
 
-SESSION_PRIVACY_TIMEOUT_SECONDS = 10  # deliberately separate from
+SESSION_PRIVACY_TIMEOUT_SECONDS = 2  # deliberately separate from
 # FLICKER_TOLERANCE — see rationale in vision-feature.md. Flicker tolerance
 # answers "is this the same brief tracking blip"; this answers "has enough
 # time passed that we assume the person genuinely left, for privacy reasons."

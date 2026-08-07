@@ -72,6 +72,8 @@ def attempt_identification(image_bytes: bytes):
         # and falling back to guest. Fixed this session.
         if result is None or result.confidence <= CONFIDENCE_THRESHOLD:
             attempts = session.increment_recognition_attempts()
+            
+            print(f"[VISION RECOGNITION] Couldn't recognize the face, this is attempt{attempts}:")
 
             if attempts == 1:
                 session.queue_stall_phrase()
