@@ -207,83 +207,88 @@ def verify_actions(
     action_keywords: list[str] | None, current_pose: str
 ) -> tuple[list[list[str]] | None, list[str], str]:
     """
-    Checks an ORDERED LIST of keywords Gemini requested against the real
-    whitelist AND against JD's tracked physical pose. This is the ONLY
-    place a Gemini-suggested action is checked before real dispatch —
-    routers.py trusts whatever this function returns without
-    re-validating.
+    SUMMARY: 
+        Checks an ORDERED LIST of keywords Gemini requested against the real
+        whitelist AND against JD's tracked physical pose. This is the ONLY
+        place a Gemini-suggested action is checked before real dispatch —
+        routers.py trusts whatever this function returns without
+        re-validating.
+    
+    TYPES OF VERIFICATIONS:
+        This function does TWO independent kinds
+        of verification per item, not one, and they behave DIFFERENTLY on
+        failure. Read both carefully, they are not interchangeable:
+    
+        1. HALLUCINATION CHECK (unchanged from before): is this keyword a
+        real entry in the whitelist at all? If not, that ONE item is
+        dropped, and the rest of the batch is still evaluated normally,
+        against an UNCHANGED simulated pose. A single hallucinated
+        keyword never costs the rest of the batch.
+    
+        2. POSE CHECK (NEW this session — the actual hardware-safety guard-
+        rail this session was built for): does this real, whitelisted
+        action's `requires_pose` match JD's CURRENTLY SIMULATED pose at
+        this exact point in the batch? The simulated pose starts at
+        `current_pose` (JD's real tracked pose entering this turn) and
+        updates after every ACCEPTED action to that action's
+        `results_pose` — so a later item in the same batch is checked
+        against the pose JD would be in AFTER earlier accepted items ran,
+        not against the turn's starting pose. If a real action's
+        required pose does NOT match the simulated pose at that point,
+        that item is rejected AND EVERY ITEM AFTER IT IN THE BATCH IS
+        DISCARDED TOO (truncation) — nothing after a broken link in a
+        sequential, order-dependent chain can be trusted to start from
+        the pose it assumed. This is a DELIBERATE ASYMMETRY versus
+        the hallucination case above: a bad pose match is more costly
+        than a bad keyword, on purpose, because pose is safety-critical
+        and keyword validity is not.
  
-    CHANGED this session — this function now does TWO independent kinds
-    of verification per item, not one, and they behave DIFFERENTLY on
-    failure. Read both carefully, they are not interchangeable:
+    CONCRETE EXAMPLE OF THE ASYMMETRY: (JD is standing).
+        ["Wave", "HallucinatedNonsense", "Bow"] -> hallucination only ->
+        verifies to [Wave's triple, Bow's triple] — the bad item is skipped,
+        everything else survives.
+        ["Wave", "SitDown", "Pushups"] -> Wave accepted (standing->standing),
+        SitDown accepted (standing->sitting, simulated pose now "sitting"),
+        Pushups REJECTED (requires "standing", simulated pose is "sitting")
+        -> TRUNCATED -> verifies to [Wave's triple, SitDown's triple] only.
+        Pushups does not fire. This is intentional, physically-motivated
+        behavior, not a bug — see tasks.md Part 0/0.5 for the hardware fall
+        this exists to prevent.
+    
+    LIMITATION:
+        GENUINE LIMITATION, not fixed by this function: the simulated pose
+        this function reasons over is a PREDICTION based on `current_pose`,
+        which is itself an unconfirmed, un-verified-by-hardware value (see
+        pose_state.py's docstring). This function has no way to know if a
+        PRIOR turn's action actually executed on real hardware — it can only
+        trust that it did. This guard-rail raises the safety ceiling; it is
+        not an absolute physical guarantee.
  
-    1. HALLUCINATION CHECK (unchanged from before): is this keyword a
-       real entry in the whitelist at all? If not, that ONE item is
-       dropped, and the rest of the batch is still evaluated normally,
-       against an UNCHANGED simulated pose. A single hallucinated
-       keyword never costs the rest of the batch.
- 
-    2. POSE CHECK (NEW this session — the actual hardware-safety guard-
-       rail this session was built for): does this real, whitelisted
-       action's `requires_pose` match JD's CURRENTLY SIMULATED pose at
-       this exact point in the batch? The simulated pose starts at
-       `current_pose` (JD's real tracked pose entering this turn) and
-       updates after every ACCEPTED action to that action's
-       `results_pose` — so a later item in the same batch is checked
-       against the pose JD would be in AFTER earlier accepted items ran,
-       not against the turn's starting pose. If a real action's
-       required pose does NOT match the simulated pose at that point,
-       that item is rejected AND EVERY ITEM AFTER IT IN THE BATCH IS
-       DISCARDED TOO (truncation) — nothing after a broken link in a
-       sequential, order-dependent chain can be trusted to start from
-       the pose it assumed. This is a DELIBERATE ASYMMETRY versus
-       the hallucination case above: a bad pose match is more costly
-       than a bad keyword, on purpose, because pose is safety-critical
-       and keyword validity is not.
- 
-    CONCRETE EXAMPLE OF THE ASYMMETRY: JD is standing.
-    ["Wave", "HallucinatedNonsense", "Bow"] -> hallucination only ->
-    verifies to [Wave's triple, Bow's triple] — the bad item is skipped,
-    everything else survives.
-    ["Wave", "SitDown", "Pushups"] -> Wave accepted (standing->standing),
-    SitDown accepted (standing->sitting, simulated pose now "sitting"),
-    Pushups REJECTED (requires "standing", simulated pose is "sitting")
-    -> TRUNCATED -> verifies to [Wave's triple, SitDown's triple] only.
-    Pushups does not fire. This is intentional, physically-motivated
-    behavior, not a bug — see tasks.md Part 0/0.5 for the hardware fall
-    this exists to prevent.
- 
-    GENUINE LIMITATION, not fixed by this function: the simulated pose
-    this function reasons over is a PREDICTION based on `current_pose`,
-    which is itself an unconfirmed, un-verified-by-hardware value (see
-    pose_state.py's docstring). This function has no way to know if a
-    PRIOR turn's action actually executed on real hardware — it can only
-    trust that it did. This guard-rail raises the safety ceiling; it is
-    not an absolute physical guarantee.
- 
-    Returns a 3-tuple: (verified_action_triples, verified_action_names,
-    final_simulated_pose).
-    - verified_action_triples: list[list[str]] | None — the [gadget,
-      cmd, param] triples surviving verification, in original order, or
-      None if nothing survived (Gemini requested nothing, or every item
-      was rejected). Unchanged shape/meaning from before — this is what
-      routers.py sends to ARC via the X-JD-Action header.
-    - verified_action_names: list[str] — the KEYWORD NAMES (e.g.
-      "StandFromSit") corresponding 1:1 with verified_action_triples, in
-      the same order. NEW this session — needed so routers.py can build
-      a human-readable action note for conversation memory (see
-      memory.py's docstring) without exposing raw ARC triples into
-      Gemini-readable memory text. Empty list if nothing survived.
-    - final_simulated_pose: str — the pose JD is predicted to be in
-      after every surviving action in the returned list executes. Equal
-      to `current_pose` unchanged if nothing survived (nothing executed,
-      so pose cannot have changed). routers.py writes this into
-      pose_state.py's PoseState via set_pose() when actions survived.
- 
-    Normalization: strips whitespace and lowercases before comparing
-    each keyword against _NORMALIZED_ACTIONS, since Gemini is a language
-    model producing free text, not a strict enum picker. Unchanged from
-    the original design.
+    PURPOSE: 
+        Returns a 3-tuple: (verified_action_triples, verified_action_names,
+        final_simulated_pose).
+        - verified_action_triples: list[list[str]] | None — the [gadget,
+        cmd, param] triples surviving verification, in original order, or
+        None if nothing survived (Gemini requested nothing, or every item
+        was rejected). Unchanged shape/meaning from before — this is what
+        routers.py sends to ARC via the X-JD-Action header.
+        - verified_action_names: list[str] — the KEYWORD NAMES (e.g.
+        "StandFromSit") corresponding 1:1 with verified_action_triples, in
+        the same order. NEW this session — needed so routers.py can build
+        a human-readable action note for conversation memory (see
+        memory.py's docstring) without exposing raw ARC triples into
+        Gemini-readable memory text. Empty list if nothing survived.
+        - final_simulated_pose: str — the pose JD is predicted to be in
+        after every surviving action in the returned list executes. Equal
+        to `current_pose` unchanged if nothing survived (nothing executed,
+        so pose cannot have changed). routers.py writes this into
+        pose_state.py's PoseState via set_pose() when actions survived.
+        
+    NOTE:
+        Normalization: strips whitespace and lowercases before comparing
+        each keyword against _NORMALIZED_ACTIONS, since Gemini is a language
+        model producing free text, not a strict enum picker. Unchanged from
+        the original design.
     """
     if not action_keywords:
         # Covers both None and an empty list — Gemini is instructed to
