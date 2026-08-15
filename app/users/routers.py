@@ -107,6 +107,13 @@ def enroll_user(
 
     if not persona.strip():
         raise HTTPException(status_code=400, detail="Persona cannot be blank.")
+    
+    # First of all hash_password to check len-related issues
+    # mentioned in app/shared/auth.py before performing cpu-
+    # intensive embedding calls, this fixes out bad-ordering
+    # as this process takes some milliseconds to verify and move
+    # on while the extract_embedding process is lengthy and consumes time
+    hashed_password = hash_password(password)  # auth.py validates length, raises ValueError if out of bounds
 
     # Extract every embedding BEFORE opening any DB write — per the
     # original locked roadmap ordering ("extract all embeddings fully
@@ -144,8 +151,6 @@ def enroll_user(
             status_code=400,
             detail="No usable photos — none had a detectable face. Please try enrolling again.",
         )
-
-    hashed_password = hash_password(password)  # auth.py validates length, raises ValueError if out of bounds
 
     try:
         user_id = insert_user(

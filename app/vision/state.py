@@ -187,6 +187,7 @@ class FaceSessionState:
             self.active_user_id = None
             self.user_profile = None
             self.recognition_status = "guest"
+            self.lost_at = None
 
     def increment_recognition_attempts(self):
         with self._lock:

@@ -33,9 +33,13 @@ On match: session.mark_identified(...), return immediately.
 On no match: recognition_attempts increments. On the FIRST miss only
 (attempts == 1), queue_stall_phrase() is set so JD can say something like
 "one sec" while still trying (Python->ARC channel for this — not yet
-wired). Once attempts >= MAX_RECOGNITION_ATTEMPTS (state.py, =3),
-mark_guest() fires — count-based, not time-based, deliberately; see
-state.py's own docstring for why wall-clock time was rejected.
+wired). Once attempts >= MAX_RECOGNITION_ATTEMPTS (state.py — a tunable knob,
+currently 2, not a fixed constant; its job is bounding how many times
+identification is attempted against a face that isn't matching anyone,
+so an unenrolled/unrecognized person doesn't trigger indefinite
+identification attempts), mark_guest() fires — count-based, not
+time-based, deliberately; see state.py's own docstring for why
+wall-clock time was rejected.
 """
 
 from app.vision.state import session, RETRY_INTERVAL_SECONDS, MAX_RECOGNITION_ATTEMPTS
