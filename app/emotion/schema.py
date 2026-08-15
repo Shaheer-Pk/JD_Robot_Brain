@@ -1,9 +1,9 @@
 """
-app/emotion/schema.py
-
-[MODEL] Pydantic schema for the emotion module's dev-only test route.
-Kept separate from services.py so anything reading this shape doesn't
-need to pull in any of the actual mood-calculation logic.
+[MODEL] Pydantic schema for the emotion module's live production route,
+GET /emotion/state - polled by ARC's MoodPoller.cs (see
+emotion-arc-csharp.md). Kept separate from services.py so anything
+reading this shape doesn't need to pull in any of the actual
+mood-calculation logic.
 """
 
 #Using pydantic to enfore data validation (return correct datatype)
@@ -11,10 +11,11 @@ from pydantic import BaseModel
 
 class EmotionStateResponse(BaseModel):
     """
-    What GET /emotion/state returns. Lets us verify the mood math works
-    correctly through a browser or FastAPI's /docs Swagger UI, before
-    ARC can receive pushed commands at all (the Python -> ARC reverse
-    channel doesn't exist yet).
+    What GET /emotion/state returns. Originally built to verify the mood
+    math through a browser/Swagger UI; now also the real, live contract
+    ARC polls to drive JD's RGB eyes. A Python -> ARC push design
+    (reverse HttpListener channel) was considered and rejected in favor
+    of this pull/poll model - see emotion-arc-csharp.md.
     """
 
     preset: str          # e.g. "happy", "angry", "sleepy"
