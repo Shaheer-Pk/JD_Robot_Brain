@@ -9,9 +9,14 @@ class ConversationMemory:
     prompt formatting, or how the data will eventually be sent to an LLM.
     That translation step belongs in brain/services.py.
 
-    reset() and seed() are intentionally unused right now. They exist as
-    forward-compatible hooks for the future face-recognition trigger
-    (reset on new face) and DB-loaded history (seed on recognized user).
+    seed() remains an unused, forward-compatible hook for future
+    DB-loaded history (seeding a recognized user's past turns at session
+    start). reset() is NO LONGER a future hook — it is called live, today,
+    by app/vision/state.py's expire_stale_session_if_needed() whenever a
+    person's session is judged to have genuinely ended (SESSION_PRIVACY_
+    TIMEOUT_SECONDS exceeded), clearing conversation memory alongside
+    identity. See memory-feature.md's "Ownership Change This Session" for
+    the full account of this landing.
 
     ACTION-HISTORY DESIGN NOTE — added this session, NO STRUCTURAL CHANGE
     MADE. As of this session, brain/routers.py records executed physical
