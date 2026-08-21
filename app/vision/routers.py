@@ -92,8 +92,9 @@ MIN_FRAME_INTERVAL_SECONDS = 1.0 / TARGET_FPS
 _last_processed_time = 0.0
 _last_known_face_present = False
 
-
-@router.post("/stream")
+# StreamStatusResponse is enforced for this router endpoint.
+# See app/vision/schemas.py for more information on StreamStatusReponse.
+@router.post("/stream", response_model=StreamStatusResponse)
 async def receive_frame(frame: UploadFile = File(...), background_tasks: BackgroundTasks = None):
     global _last_processed_time, _last_known_face_present
 

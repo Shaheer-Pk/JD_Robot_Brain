@@ -1,37 +1,45 @@
 """
-app/brain/routers.py — The HTTP entrypoint the C# skill hits after
-hearing finishes transcribing an utterance (POST /brain/chat, per
-hearing-feature.md's pipeline). Ties conversation (Gemini), identity
-(vision), pose tracking, and speech (Piper TTS) into one request/
-response cycle: text in, synthesized WAV audio out.
+SUMMARY:
 
-Identity comes from app.vision.state.session, NOT from anything the
-client sends — ChatRequest carries only {"text": str}, deliberately
-unchanged. This route reads session.get_profile() itself at request
-time rather than requiring identity to be passed over the wire.
+    app/brain/routers.py — The HTTP entrypoint the C# skill hits after
+    hearing finishes transcribing an utterance (POST /brain/chat, per
+    hearing-feature.md's pipeline). Ties conversation (Gemini), identity
+    (vision), pose tracking, and speech (Piper TTS) into one request/
+    response cycle: text in, synthesized WAV audio out.
 
-profile is None in two cases NOT distinguished here, on purpose: truly
-unrecognized (recognition_status == "guest") AND still mid-recognition
-(recognition_status == "pending"). Accepted tradeoff, not a bug.
+IDENTITY + VISION JUNCTION POINT:
+    Identity comes from app.vision.state.session, NOT from anything the
+    client sends — ChatRequest carries only {"text": str}, deliberately
+    unchanged. This route reads session.get_profile() itself at request
+    time rather than requiring identity to be passed over the wire.
 
-When profile exists, only name and persona are pulled into
-custom_personality — NOT the full vision dict.
+    profile is None in two cases NOT distinguished here, on purpose: truly
+    unrecognized (recognition_status == "guest") AND still mid-recognition
+    (recognition_status == "pending"). Accepted tradeoff, not a bug.
 
-CHANGED this session — pose tracking added. See app/brain/pose_state.py
-for the full rationale (single tracked value, own lock, prediction-not-
-confirmation limitation). This route now:
-  1. Reads JD's current tracked pose BEFORE the Gemini call, feeds it
-     into get_llm_response() as pose_context (same pattern as
-     mood_context).
-  2. Passes that same pose into verify_actions() as current_pose, so
-     the guard-rail can simulate pose transitions through the batch.
-  3. Writes memory_session.add_turn() HERE, after verify_actions()
-     resolves — MOVED from services.py's get_llm_response(), which
-     used to call it before verification ever ran. See
-     services.py's get_llm_response() docstring/comments for why that
-     ordering was wrong once action history needed to be recorded.
-  4. Writes the new tracked pose back via pose_session.set_pose(),
-     ONLY when at least one action survived verification.
+    When profile exists, only name and persona are pulled into
+    custom_personality — NOT the full vision dict.
+
+POSE TRACKING & WORKING:
+    Pose tracking added. See app/brain/pose_state.py
+    for the full rationale (single tracked value, own lock, prediction-not-
+    confirmation limitation). This route now:
+    1. Reads JD's current tracked pose BEFORE the Gemini call, feeds it
+        into get_llm_response() as pose_context (same pattern as
+        mood_context).
+    2. Passes that same pose into verify_actions() as current_pose, so
+        the guard-rail can simulate pose transitions through the batch.
+    3. Writes memory_session.add_turn() HERE, after verify_actions()
+        resolves — MOVED from services.py's get_llm_response(), which
+        used to call it before verification ever ran. See
+        services.py's get_llm_response() docstring/comments for why that
+        ordering was wrong once action history needed to be recorded.
+    4. Writes the new tracked pose back via pose_session.set_pose(),
+        ONLY when at least one action survived verification.
+
+NOTE:
+    t0, t1, etc are debug lines to measure and optimize latency based issues around
+    brain endpoint.
 """
 import asyncio
 import json  # for serializing the verified action triple into a response header

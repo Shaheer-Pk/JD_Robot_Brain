@@ -42,16 +42,21 @@ first_detected_at is set ONLY when a genuinely new face starts a session
 logging/debugging even though the recognition-timeout guard no longer
 reads it (that logic is count-based now, below).
 
-MAX_RECOGNITION_ATTEMPTS (=3), not time-based: recognition_services.py
-gives up and calls mark_guest() once recognition_attempts >= 3 failed
-tries. Chosen over wall-clock time because thread-scheduling delay under
-load makes elapsed real time a poor proxy for "how many attempts actually
-ran" — count is what "max 3 attempts" is actually supposed to mean.
+MAX_RECOGNITION_ATTEMPTS, not time-based: recognition_services.py gives
+up and calls mark_guest() once recognition_attempts >= this many failed
+tries (currently 2 — adjustable per hardware/environment; tune upward if
+slower or less-confident hardware needs more attempts before falling
+back to guest). Chosen over wall-clock time because thread-scheduling
+delay under load makes elapsed real time a poor proxy for "how many
+attempts actually ran" — count is what "max N attempts" is actually
+supposed to mean.
 
-RETRY_INTERVAL_SECONDS (=1.5): throttles how often attempt_identification
-does real work, via start_recognition_attempt()/finish_recognition_attempt()
+RETRY_INTERVAL_SECONDS: throttles how often attempt_identification does
+real work, via start_recognition_attempt()/finish_recognition_attempt()
 — an in-progress + min-interval gate preventing overlapping attempts and
-preventing a new attempt firing on every single incoming frame.
+preventing a new attempt firing on every single incoming frame. Currently
+0.5s — adjustable per hardware/environment, same as the other timing
+constants in this file; not a value to treat as fixed.
 """
 
 from time import time
@@ -182,6 +187,7 @@ class FaceSessionState:
             self.active_user_id = None
             self.user_profile = None
             self.recognition_status = "guest"
+            self.lost_at = None
 
     def increment_recognition_attempts(self):
         with self._lock:

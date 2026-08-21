@@ -6,11 +6,6 @@ from typing import Literal
 class ChatRequest(BaseModel):
     text: str
 
-# Potentially dead code not confirmed though yet — endpoint returns raw
-# audio bytes via Response(), not this model
-class ChatResponse(BaseModel):
-    response: str
-
 """
 Change our Gemini response format from a string to a JSON with a "response" 
 in string that will become audio bytes and an "is_repeat" boolean check 
@@ -24,10 +19,11 @@ or the other — a single-action field structurally could not represent
 this, and was the root cause of a real, hardware-observed bug: only one
 of the two requested actions could ever be sent, so the wrong one fired
 against the wrong starting pose). Still deliberately NOT a Literal enum
-or a list of an enum, for the same reason as before — the whitelist is
-long (~38 entries) and will grow, and a schema-level constraint would
-mean every new action needs a schema edit + redeploy on top of the
-robot_profile.json edit. Free text here is caught by verify_actions()'s
+or a list of an enum, for the same reason as before - the whitelist has
+22 real entries as of this session (see robot_profile.json) and will
+grow, and a schema-level constraint would mean every new action needs a
+schema edit + redeploy on top of the robot_profile.json edit.
+Free text here is caught by verify_actions()'s
 dict-based guardrail in services.py instead, per-item — Gemini is never
 trusted to have generated real, executable actions on its own, and one
 hallucinated entry in the list no longer invalidates the rest of it (see

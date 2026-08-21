@@ -243,7 +243,13 @@ class MoodState:
     #         self.last_updated = time()      # Done for decay during neutral conversation
 
     def seconds_since_interaction(self) -> float:
-        """Used by services.py to check the 5-minute sleepy threshold."""
+        """
+        Used by services.py to check the sleepy idle threshold. The
+        threshold itself is NOT hardcoded here - it's a tunable value
+        read from emotion_profile.json's sleepy_idle_minutes at import
+        time (currently 2 minutes; change the JSON, not this file, to
+        retune it).
+        """
         with self._lock:
             return time() - self.last_interaction
 
